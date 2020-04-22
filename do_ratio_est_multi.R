@@ -1,16 +1,21 @@
 #An alternate version of the ratio estimator function that creates bycatch estimates for multiple species
+#bycatchspp is the name of all species we want to do expansions for. Question: use species or SPID_EQV?
+#bycatchunit is the name of the column that has the weight or count of bycatch 
 
-do_ratio_est_multi <- function(ob_data, ft_data, strata, expfactor, bycatchspp)
+do_ratio_est_multi <- function(ob_data, ft_data, strata, expfactor, bycatchspp, bycatchunit)
 {
   require(dplyr)
   require(rlang)
   
   expf <- enquo(expfactor) 
   
-  byc <- enquo(bycatchspp)
+  #byc <- enquo(bycatchspp)
+  
+  byc_unit <- enquo(bycatchunit)
   
   obdf <- ob_data %>% 
-    group_by_at(c(strata, byc, "haul_id", "trip_id", "drvid")) %>% 
+    filter(SPID_EQV %in% bycatchspp) %>% 
+    group_by_at(c(strata, "SPID_EQV", "haul_id", "trip_id", "drvid")) %>% 
     summarise(byc = sum(!!byc),
               expf = sum(!!expf, na.rm=T)) %>% #!! unquotes the quosure
     ungroup() %>% 
