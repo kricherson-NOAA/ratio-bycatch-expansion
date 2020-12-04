@@ -1,8 +1,9 @@
-#This function does expansions for the small amounts of unobserved catch in the CS fisheries
+#inputs: df (ob_cs data frame), bycatchsp (bycatch species of interest), bycatchunit(column name with bycatch unit, eg gstg_count)
 
-#inputs: df (cs observer data frame), bycatchsp (bycatch species of interest), bycatchunit (column name with bycatch unit, eg gstg_count)
-
-#Note this is inconistent with other functions because I am using spid_eqv instead of species to identify the column with the bycatch species of interest -- should make all consistent at some point
+# df<-ob_cs_bt
+# strata<-c("year","r_state")
+# bycatchspp <-c("GSTG", "EULC")
+# save(df, file = "df.Rdata")
 
 do_cs_expansion <- function(df, strata, bycatchspp)
 {
@@ -22,6 +23,34 @@ do_cs_expansion <- function(df, strata, bycatchspp)
   {
     bycatchsp <- bycatchspp[s]
     
+    #Summarize coverage and observed bycatch
+    cvg <- df %>%
+      group_by_at(strata) %>% 
+      summarise(obs_tgt_mt = sum(tgt_mt[datatype == "Analysis Data" | 
+                                          (datatype == "Unsampled IFQ" & 
+                                             catch_category_code != "NIFQ")], na.rm = T),
+                obs_hauls = n_distinct(haul_id[datatype == "Analysis Data" | 
+                                                 (datatype == "Unsampled IFQ" & 
+                                                    catch_category_code != "NIFQ")]),
+                obs_byc_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                                             datatype == "Analysis Data" &
+                                             catch_disposition == "D"]),
+                obs_byc_wt = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                                             datatype == "Analysis Data" &
+                                             catch_disposition == "D"]),
+                n_obs_ves = n_distinct(drvid[datatype == "Analysis Data" | 
+                                               (datatype == "Unsampled IFQ" & 
+                                                  catch_category_code != "NIFQ")]), 
+                unobs_tgt_mt = sum(tgt_mt[datatype != "Analysis Data" & 
+                                            !(datatype == "Unsampled IFQ" & 
+                                                catch_category_code != "NIFQ")], na.rm = T),
+                unobs_hauls = n_distinct(haul_id[datatype != "Analysis Data" & 
+                                                   !(datatype == "Unsampled IFQ" & 
+                                                       catch_category_code != "NIFQ")])) %>% 
+      mutate(pct_tgt_obs = round((obs_tgt_mt / (obs_tgt_mt + unobs_tgt_mt)) * 100 , 1),
+             total_tgt_mt = obs_tgt_mt + unobs_tgt_mt)
+    
+    
     #For salmon and green sturgeon, identify NIFQ hauls that need expansion. These are hauls where species is present in strata, but not listed as species specific discard in a given haul. 
     if(bycatchsp %in% c("CHNK", "CHUM", "COHO", "PINK", "STLH", "SOCK", "USMN", "GSTG"))
     {
@@ -32,7 +61,8 @@ do_cs_expansion <- function(df, strata, bycatchspp)
         filter(!prot_in_haul) #filter to only hauls without discarded protected species
     }
     
-    # For eulachon, always expand if EULC occurs in the strata, even if EULC is also listed in DISCARD of a given haul.
+    # For eulachon, always expand if EULC occurs in the strata, even if EULC is also listed in DISCARD of a given haul. Note that you should include this explanation in any reports for EULC and highlight that this estimate is conservative due to the potential over expansion.
+    
     if(bycatchspp[s] == "EULC")
     {
       nifq_hauls_to_expand <- hauls_nifq 
@@ -41,7 +71,7 @@ do_cs_expansion <- function(df, strata, bycatchspp)
     #identify failed trips
     failed_trips <- unique(df$trip_id[df$datatype == "Failed Data"])
     
-    #Now create DF with numerators, denominators, and expansion factors. Note conversion to MT
+    #Now create DF with numerators, denominators, and expansion factors. Note conversion to MT. There is some redundancy in here in the numerators, but leaving for now for explicitness.
     unsamp_expansion <- df %>% 
       group_by_at(strata) %>% 
       summarise(nifq_num_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
@@ -116,7 +146,10 @@ do_cs_expansion <- function(df, strata, bycatchspp)
       mutate_at(vars(-group_cols()), ~replace(., is.nan(.), 0)) %>% #when dividing by 0 we get NANs that need to be replaced
       mutate(est_unsamp_ct = est_nifq_ct + est_zmis_ct + est_unst_ct + est_fail_ct,
              est_unsamp_wt = est_nifq_wt + est_zmis_wt + est_unst_wt + est_fail_wt,
-             bycsp = bycatchsp)
+             bycsp = bycatchsp) %>% 
+      full_join(cvg, by = strata) %>% 
+      mutate(total_byc_ct = obs_byc_ct + est_unsamp_ct,
+             total_byc_wt = obs_byc_wt + est_unsamp_wt)
     
     cs_sp_expansions[[s]] <- unsamp_expansion
     
