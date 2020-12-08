@@ -21,7 +21,8 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp, by
   
   #create expansion factors data frame
   exp_factors <- ft_dat %>% 
-    mutate(r_state = state) %>% 
+    clean_names() %>% 
+    #mutate(r_state = state) %>% 
     group_by_at(strata) %>% 
     summarise(fleet_expf = sum(!!sym(expfactor), na.rm=T))
   
@@ -31,6 +32,12 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp, by
            est_byc = byc_ratio * fleet_expf,
            est_byc_lower = byc_ratio_lower * fleet_expf,
            est_byc_upper = byc_ratio_upper * fleet_expf)
+  
+  if(management_groups)
+  {
+    out <- out %>% 
+      mutate(grouping = gsub("<b0>", "\xb0", grouping))
+  }
   
   return(out)
   
