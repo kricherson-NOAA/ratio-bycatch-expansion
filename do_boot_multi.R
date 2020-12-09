@@ -1,7 +1,7 @@
 #This function creates ratio estimates of bycatch with bootstrapped confidence intervals
 #For now, it does not have an option to include management groups
 
-do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = tgt_mt, bycatchspp, bycatchunit = "dis_mt", seed = 42)
+do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchspp, bycatchunit = "dis_mt", seed = 42)
 {
   require(dplyr)
   require(tidyr)
