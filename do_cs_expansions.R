@@ -1,9 +1,6 @@
-#inputs: df (ob_cs data frame), bycatchsp (bycatch species of interest), bycatchunit(column name with bycatch unit, eg gstg_count)
+#This expands the observed bycatch of protected species to the small amount of unobserved effort in catch shares fisheries
 
-# df<-ob_cs_bt
-# strata<-c("year","r_state")
-# bycatchspp <-c("GSTG", "EULC")
-# save(df, file = "df.Rdata")
+#inputs: df (data frame of CS observer data including unsampled hauls), bycatchsp (bycatch species of interest from the "species" column), bycatchunit(column name with bycatch unit, eg gstg_count)
 
 do_cs_expansion <- function(df, strata, bycatchspp)
 {
