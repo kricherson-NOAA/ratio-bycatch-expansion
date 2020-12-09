@@ -32,10 +32,10 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                 obs_hauls = n_distinct(haul_id[datatype == "Analysis Data" | 
                                                  (datatype == "Unsampled IFQ" & 
                                                     catch_category_code != "NIFQ")]),
-                obs_byc_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                obs_byc_ct = sum(exp_sp_ct[species == bycatchsp &
                                              datatype == "Analysis Data" &
                                              catch_disposition == "D"]),
-                obs_byc_wt = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                obs_byc_wt = sum(exp_sp_ct[species == bycatchsp &
                                              datatype == "Analysis Data" &
                                              catch_disposition == "D"]),
                 n_obs_ves = n_distinct(drvid[datatype == "Analysis Data" | 
@@ -52,18 +52,20 @@ do_cs_expansion <- function(df, strata, bycatchspp)
     
     
     #For salmon and green sturgeon, identify NIFQ hauls that need expansion. These are hauls where species is present in strata, but not listed as species specific discard in a given haul. 
-    if(bycatchsp %in% c("CHNK", "CHUM", "COHO", "PINK", "STLH", "SOCK", "USMN", "GSTG"))
+    #if(bycatchsp %in% c("CHNK", "CHUM", "COHO", "PINK", "STLH", "SOCK", "USMN", "GSTG"))
+    if(bycatchsp %in% c("Chinook (King) Salmon", "Chum (Dog) Salmon", "Coho (Silver) Salmon", "Pink (Humpback) Salmon", "Steelhead (Rainbow Trout)", "Sockeye (Red) Salmon", "Salmon Unid", "Green Sturgeon"))
     {
       nifq_hauls_to_expand <- hauls_nifq %>% 
-        distinct(haul_id, spid_eqv, catch_disposition) %>% 
+        distinct(haul_id, species, catch_disposition) %>% 
         group_by(haul_id) %>% 
-        mutate(prot_in_haul = ifelse(paste0(bycatchsp, "D") %in% paste0(spid_eqv, catch_disposition), TRUE, FALSE)) %>%  #This identifies hauls within the hauls with NIFQ that have discareded protected species
+        mutate(prot_in_haul = ifelse(paste0(bycatchsp, "D") %in% paste0(species, catch_disposition), TRUE, FALSE)) %>%  #This identifies hauls within the hauls with NIFQ that have discareded protected species
         filter(!prot_in_haul) #filter to only hauls without discarded protected species
     }
     
     # For eulachon, always expand if EULC occurs in the strata, even if EULC is also listed in DISCARD of a given haul. Note that you should include this explanation in any reports for EULC and highlight that this estimate is conservative due to the potential over expansion.
     
-    if(bycatchspp[s] == "EULC")
+    #if(bycatchspp[s] == "EULC")
+    if(bycatchspp[s] == "Eulachon")
     {
       nifq_hauls_to_expand <- hauls_nifq 
     }
@@ -74,15 +76,16 @@ do_cs_expansion <- function(df, strata, bycatchspp)
     #Now create DF with numerators, denominators, and expansion factors. Note conversion to MT. There is some redundancy in here in the numerators, but leaving for now for explicitness.
     unsamp_expansion <- df %>% 
       group_by_at(strata) %>% 
-      summarise(nifq_num_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+      summarise(nifq_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
                 
-                nifq_num_wt = sum(exp_sp_wt[spid_eqv == bycatchsp &
+                nifq_num_wt = sum(exp_sp_wt[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
                 nifq_denom = sum(mt[ifq == 0 &
+                                      datatype == "Analysis Data" &
                                       catch_disposition == "D"]),
                 
                 nifq_expf = sum(mt[ifq == 0 &
@@ -91,11 +94,11 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                      catch_disposition == "D" &
                                      haul_id %in% nifq_hauls_to_expand$haul_id]),
                 
-                zmis_num_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                zmis_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
                 
-                zmis_num_wt = sum(exp_sp_wt[spid_eqv == bycatchsp &
+                zmis_num_wt = sum(exp_sp_wt[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
@@ -107,11 +110,11 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                      species_composition_id == 0 &
                                      catch_disposition == "D"]),
                 
-                unst_num_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                unst_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
                 
-                unst_num_wt = sum(exp_sp_wt[spid_eqv == bycatchsp &
+                unst_num_wt = sum(exp_sp_wt[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
@@ -122,11 +125,11 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                      species_composition_id == 0 &
                                      catch_disposition == "D"]),
                 
-                fail_num_ct = sum(exp_sp_ct[spid_eqv == bycatchsp &
+                fail_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
                 
-                fail_num_wt = sum(exp_sp_wt[spid_eqv == bycatchsp &
+                fail_num_wt = sum(exp_sp_wt[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
