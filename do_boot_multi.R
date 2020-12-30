@@ -1,7 +1,17 @@
 #This function creates ratio estimates of bycatch with bootstrapped confidence intervals
-#For now, it does not have an option to include management groups
 
-do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchspp, bycatchunit = "dis_mt", seed = 42)
+#For now, it does not have an option to include management groups
+#arguments: 
+# ob_dat (object name) is observer data
+# ft_dat (object name) is fish ticket data
+# strata (character vector) are the reporting strata 
+# vessel_strata (character vector) are the strata that vessels should be aggregated at for bootstrapping. May be different from strata if pooling across strata for bootstrapping
+# expfactor (Character) is the name of the column with the expansion factor
+# bycatchspp (character vector) are the bycatch species of interest
+# bycatchunit (character) is the name of the column with the units of bycatch
+# seed (number) is the randomization seed
+
+do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfactor = "tgt_mt", bycatchspp, bycatchunit = "dis_mt", seed = 42)
 {
   require(dplyr)
   require(tidyr)
@@ -73,12 +83,8 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchs
     #Joining all the unique haul/bycatch species combinations ensures that hauls with 0 catch are preserved.
     right_join(unique_hauls_sp) %>% 
     group_by_at(c(strata, "species", "haul_id", "trip_id", "drvid")) %>% 
-    ###summarise(byc_haul = sum(!!byc_unit, na.rm=T)) %>% 
     summarise(byc_haul = sum(!!sym(bycatchunit), na.rm=T)) %>% 
-    #byc = sum(dis_mt, na.rm = T)) %>% #!! unquotes the quosure
     ungroup() %>% 
-    #Fill in 0s for strata without observed bycatch, for completeness. "Nesting" should return only strata combinations present in the data. 
-    #tidyr::complete(tidyr::nesting(!!!syms(strata)), spid_eqv, fill = list(byc = 0)) %>% 
     #Summarise the observed bycatch by strata, including the number of hauls that encountered bycatch
     group_by_at(c(strata, "species")) %>% 
     summarise(total_byc = sum(byc_haul),
@@ -97,7 +103,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchs
   
   #Bootstrap portion
   ob_byvessel_expf <- ob_data %>% 
-    group_by_at(c(strata, "drvid")) %>% 
+    group_by_at(c(vessel_strata, "drvid")) %>% 
     summarise(ves_expf = sum(!!sym(expfactor), na.rm=T)) %>% 
     #Now cobble together a column that contains the bycatch species so that we can join bycatch info without losing any strata with 0 bycatch (maybe not needed? but for completeness...). Clumsy but ok I guess.
     mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
@@ -107,27 +113,12 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchs
   
   ob_byvessel_byc <- ob_data %>% 
     filter(species %in% bycatchspp) %>% 
-    group_by_at(c(strata, "drvid", "species")) %>% 
+    group_by_at(c(vessel_strata, "drvid", "species")) %>% 
     summarise(ves_byc = sum(!!sym(bycatchunit), na.rm=T))
   
-  ob_byvessel <- full_join(ob_byvessel_expf, ob_byvessel_byc, by = c(strata, "drvid", "species")) %>% 
+  ob_byvessel <- full_join(ob_byvessel_expf, ob_byvessel_byc, by = c(vessel_strata, "drvid", "species")) %>% 
     mutate(ves_byc = ifelse(is.na(ves_byc), 0, ves_byc))
   
-  #Get FT data by vessel
-  ft_byvessel <- ft_dat %>%
-    # mutate(tgt_mt = case_when(sector %in% c("Limited Entry Trawl", "Midwater Rockfish", "Catch Shares", "OA Fixed Gear", "LE Fixed Gear DTL") ~ gfr_mt,
-    #                           sector ==  "Limited Entry Sablefish" ~ sabl_mt,
-    #                           sector %in% c("LE CA Halibut", "OA CA Halibut") ~ chlb_mt,
-    #                           sector == "Nearshore" ~ ns_mt,
-    #                           sector == "Pink Shrimp" ~ ps_mt,
-    #                           sector == "Directed P Halibut" ~ phlb_mt,
-    #                           sector == "Sea Cucumber" ~ cuke_mt,
-    #                           sector == "Ridgeback Prawn" ~ prwn_mt,
-    #                           sector %in% c("Shoreside Hake", "Midwater Hake") ~ pwht_mt)) %>% 
-    group_by_at(c(strata, "drvid")) %>%  
-    summarise(ves_ft_expf = sum(!!sym(expfactor), na.rm=T)) %>% 
-    group_by_at(strata) %>%  
-    mutate(fleet_ft_expf = sum(ves_ft_expf, na.rm=T))
   
   #This function feeds into boot::boot as the statistic argument. It takes a data frame of vessel-level data and calculates the bycatch ratio according to the vessels sampled by the bootstrapping routine
   byc_ratio_fun <- function(vdata, indices){ #vdata is the vessel-level data, indices will be the rows sampled by the boot function
@@ -137,9 +128,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchs
   }
   
   booted <- ob_byvessel %>% 
-    left_join(ft_byvessel, by=c(strata, "drvid")) %>% 
     filter(ves_expf>0) %>% #So that we don't end up dividing by 0 -- there are two vessel/season/state combos with 0 retained groundfish (and 0 gstg)
-    filter(!is.na(ves_ft_expf)) %>% #Because of missing LE FTs, there are some NAs. Ignore these few cases (3) where a vessel apparently had observed landings, but no FT landings. There could be a better way of doing things?
     group_by_at(c(strata, "species"))%>% 
     nest() %>% #This creates a row for each year/state/season, with a data column that contains a df with all the data for that year/state/season
     mutate(booted = map(.x = data, # The list-column with the vessel-level data
@@ -172,7 +161,9 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, expfactor = "tgt_mt", bycatchs
            byc_ratio = total_byc / total_expf,
            est_byc = byc_ratio * fleet_expf,
            est_byc_lower = lower_ci* fleet_expf,
-           est_byc_upper = upper_ci * fleet_expf) %>% 
+           est_byc_lower_trunc = ifelse(est_byc_lower < total_byc, total_byc, est_byc_lower), #Truncate at observed value
+           est_byc_upper = upper_ci * fleet_expf,
+    ) %>% 
     ungroup()
   
   return(out) 

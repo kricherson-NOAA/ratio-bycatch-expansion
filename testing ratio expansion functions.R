@@ -1,5 +1,12 @@
 #Testing ratio expansion functions
 
+library(dplyr)
+library(janitor)
+
+#Load observer and fish ticket data
+source("~/observer/Input/load_data_2020-08-14.R")
+load_data(c("WCGOP_proc", "FT_proc"))
+
 ##%######################################################%##
 #                                                          #
 ####              testing do_ratio_multi.R              ####
@@ -412,8 +419,15 @@ le_booted_gstg2 <- do_boot_multi(ob_dat = ob_le, ft_dat = ft_le, strata = c("yea
 #compare
 names(le_booted_gstg2) <- names(le_booted_gstg)
 
-# all match (though depending on exactly how this gets implemented, it's not suprising to see small differences due to randomness of bootstrap. Seed must be set the same, dfs ordered the same, etc)
+# all match (though depending on exactly how this gets implemented, it's not suprising to see small differences due to randomness of bootstrap. Seed must be set the same, dfs ordered the same, etc). Everything matched exactly until I implemented the change to be able to specify vessel strata separately (for use when pooling across reporting strata), now there is a very tiny difference in the upper CI in some years. I *think* this is ok. 
 all.equal(le_booted_gstg, le_booted_gstg2) 
+
+all.equal(le_booted_gstg2$byc_ratio, le_booted_gstg$byc_ratio)
+all.equal(le_booted_gstg2$expand_gstg_ct, le_booted_gstg$expand_gstg_ct)
+all.equal(le_booted_gstg2$lower_gstg_ct, le_booted_gstg$lower_gstg_ct)
+all.equal(le_booted_gstg2$upper_gstg_ct, le_booted_gstg$upper_gstg_ct)
+plot(le_booted_gstg2$upper_gstg_ct, le_booted_gstg$upper_gstg_ct)
+abline(c(0,1))
 
 ##%######################################################%##
 #                                                          #
