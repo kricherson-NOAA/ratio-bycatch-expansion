@@ -152,7 +152,7 @@ do_boot_ratio_multi <- function(ob_dat, strata, vessel_strata = strata, expfacto
   out <- booted %>% 
     full_join(obdf_expf, by = c(strata, bycatchspp_string)) %>% 
     full_join(obdf_byc, by = c(strata, bycatchspp_string)) %>% 
-    mutate(pct_cvg = round((total_expf / fleet_expf) * 100, 2),
+    mutate(#pct_cvg = round((total_expf / fleet_expf) * 100, 2),
            pct_hauls_byc = round((n_hauls_byc/n_obs_hauls)*100, 2),
            byc_ratio = total_byc / total_expf,
            est_byc = byc_ratio * fleet_expf,
