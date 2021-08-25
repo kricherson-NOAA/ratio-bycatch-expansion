@@ -8,12 +8,15 @@
 #bycatchunit = The name of the column with the measure of bycatch to be expanded. Defaults to dis_mt, but could be counts, etc. 
 #management_groups = do we want to calculate ratios by managment grouping? Defaults to TRUE.
 
-do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, bycatchunit = "dis_mt", management_groups = TRUE)
+do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp_col = species, bycatchspp, bycatchunit = "dis_mt", management_groups = TRUE)
 {
   require(dplyr)
   require(tidyr)
   require(rlang)
   require(janitor)
+  
+  bycatchspp_col <- enquo(bycatchspp_col)
+  bycatchspp_string <- gsub("~","", deparse(bycatchspp_col)) #make into string for grouping 
   
   #Identify whether the input data is ASHOP or WCGOP
   if(any(ob_dat$sector %in% c("CATCHER-PROCESSOR", "MOTHERSHIP", "ATSEA TRIBAL"))){program <- "ASHOP"} else {
@@ -57,7 +60,7 @@ do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, byc
       #Now cobble together a column that contains the bycatch species so that we can join bycatch info without losing any strata with 0 bycatch (maybe not needed? but for completeness...). Clumsy but ok I guess.
       mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
       tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-      tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+      tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
       dplyr::select(-whatev)
     
     #Get unique combination of bycatch species, hauls, to make sure we account for hauls with 0 bycatch below. This seemed simpler than dealing with nested tidyr::expand.
@@ -68,21 +71,21 @@ do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, byc
       #This is a hacky way of making sure each row contains strata, trip, haul, drvid, and bycatch species
       mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
       tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-      tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+      tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
       dplyr::select(-whatev)
     
     #Now summarise bycatch data by strata
     obdf_byc <- ob_data %>% 
       #Haul-level summary  
       #Filter to only species of interest
-      filter(species %in% bycatchspp) %>% #
+      filter(!!bycatchspp_col %in% bycatchspp) %>% #
       #Joining all the unique haul/bycatch species combinations ensures that hauls with 0 catch are preserved.
       right_join(unique_hauls_sp) %>% 
-      group_by_at(c(strata, "species", "haul_id", "trip_id", "drvid")) %>% 
+      group_by_at(c(strata, bycatchspp_string, "haul_id", "trip_id", "drvid")) %>% 
       summarise(byc_haul = sum(!!sym(bycatchunit), na.rm=T)) %>% 
       ungroup() %>% 
       #Summarise the observed bycatch by strata, including the number of hauls that encountered bycatch
-      group_by_at(c(strata, "species")) %>% 
+      group_by_at(c(strata, bycatchspp_string)) %>% 
       summarise(total_byc = sum(byc_haul),
                 mean_byc = mean(byc_haul),
                 se_byc = sqrt(var(byc_haul)/length(byc_haul)),
@@ -121,12 +124,12 @@ do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, byc
       #Now cobble together a column that contains the bycatch species so that we can join bycatch info without losing any strata with 0 bycatch (maybe not needed? but for completeness...). Clumsy but ok I guess.
       mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
       tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-      tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+      tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
       dplyr::select(-whatev)
     
     #Get the groupings we may need to preserve (any that are present in the data and contain our species of interest)
-    spp_grps <- filter(ob_data, species %in% bycatchspp) %>% 
-      dplyr::select(species, grouping) %>% 
+    spp_grps <- filter(ob_data, !!bycatchspp_col %in% bycatchspp) %>% 
+      dplyr::select(!!bycatchspp_col, grouping) %>% 
       distinct()
     
     #Get unique combination of bycatch species, hauls, management groups to make sure we account for hauls with 0 bycatch below. This seemed simpler than dealing with nested tidyr::expand.
@@ -137,7 +140,7 @@ do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, byc
       #This is a hacky way of making sure each row contains strata, trip, haul, drvid, and bycatch species
       mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
       tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-      tidyr::gather(species, whatev, bycatchspp) %>% 
+      tidyr::gather(!!bycatchspp_col, whatev, bycatchspp) %>% 
       dplyr::select(-whatev)%>% 
       full_join(spp_grps)
     
@@ -145,17 +148,17 @@ do_ratio_multi <- function(ob_dat, strata, expfactor = "tgt_mt", bycatchspp, byc
     obdf_byc <- ob_data %>% 
       #Haul-level summary  
       #Filter to only species of interest
-      filter(species %in% bycatchspp) %>% #
+      filter(!!bycatchspp_col %in% bycatchspp) %>% #
       #Joining all the unique haul/bycatch species combinations ensures that hauls with 0 catch are preserved.
       right_join(unique_hauls_sp) %>% 
-      group_by_at(c(strata, "grouping", "species", "haul_id", "trip_id", "drvid")) %>% 
+      group_by_at(c(strata, "grouping", bycatchspp_string, "haul_id", "trip_id", "drvid")) %>% 
       ###summarise(byc_haul = sum(!!byc_unit, na.rm=T)) %>% 
       summarise(byc_haul = sum(!!sym(bycatchunit), na.rm=T)) %>%
       ungroup() %>% 
       #Fill in 0s for strata without observed bycatch, for completeness. "Nesting" should return only strata combinations present in the data. 
       #tidyr::complete(tidyr::nesting(!!!syms(strata)), spid_eqv, fill = list(byc = 0)) %>% 
       #Summarise the observed bycatch by strata, including number of hauls with bycatch
-      group_by_at(c(strata, "grouping", "species")) %>% 
+      group_by_at(c(strata, "grouping", bycatchspp_string)) %>% 
       summarise(total_byc = sum(byc_haul),
                 mean_byc = mean(byc_haul),
                 se_byc = sqrt(var(byc_haul)/length(byc_haul)),
