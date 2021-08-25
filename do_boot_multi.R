@@ -7,11 +7,12 @@
 # strata (character vector) are the reporting strata 
 # vessel_strata (character vector) are the strata that vessels should be aggregated at for bootstrapping. May be different from strata if pooling across strata for bootstrapping
 # expfactor (Character) is the name of the column with the expansion factor
+# bycatchspp_col is the name of the column with the bycatch species of interest
 # bycatchspp (character vector) are the bycatch species of interest
 # bycatchunit (character) is the name of the column with the units of bycatch
 # seed (number) is the randomization seed
 
-do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfactor = "tgt_mt", bycatchspp, bycatchunit = "dis_mt", seed = 42)
+do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfactor = "tgt_mt", bycatchspp_col = species, bycatchspp, bycatchunit = "dis_mt", seed = 42)
 {
   require(dplyr)
   require(tidyr)
@@ -20,6 +21,9 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
   require(boot)
   
   set.seed(seed)
+  
+  bycatchspp_col <- enquo(bycatchspp_col)
+  bycatchspp_string <- gsub("~","", deparse(bycatchspp_col)) #make into string for grouping 
   
   #Identify whether the input data is ASHOP or WCGOP (won't ever be bootstrapping ASHOP but leaving this in for now)
   if(any(ob_dat$sector %in% c("CATCHER-PROCESSOR", "MOTHERSHIP", "ATSEA TRIBAL"))){program <- "ASHOP"} else {
@@ -60,7 +64,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
     #Now cobble together a column that contains the bycatch species so that we can join bycatch info without losing any strata with 0 bycatch (maybe not needed? but for completeness...). Clumsy but ok I guess.
     mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
     tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-    tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+    tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
     dplyr::select(-whatev)
   
   
@@ -72,21 +76,21 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
     #This is a hacky way of making sure each row contains strata, trip, haul, drvid, and bycatch species
     mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
     tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-    tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+    tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
     dplyr::select(-whatev)
   
   #Now summarise bycatch data by strata
   obdf_byc <- ob_data %>% 
     #Haul-level summary  
     #Filter to only species of interest
-    filter(species %in% bycatchspp) %>% #
+    filter(!!bycatchspp_col %in% bycatchspp) %>% #
     #Joining all the unique haul/bycatch species combinations ensures that hauls with 0 catch are preserved.
     right_join(unique_hauls_sp) %>% 
-    group_by_at(c(strata, "species", "haul_id", "trip_id", "drvid")) %>% 
+    group_by_at(c(strata, bycatchspp_string, "haul_id", "trip_id", "drvid")) %>% 
     summarise(byc_haul = sum(!!sym(bycatchunit), na.rm=T)) %>% 
     ungroup() %>% 
     #Summarise the observed bycatch by strata, including the number of hauls that encountered bycatch
-    group_by_at(c(strata, "species")) %>% 
+    group_by_at(c(strata, bycatchspp_string)) %>% 
     summarise(total_byc = sum(byc_haul),
               mean_byc = mean(byc_haul),
               se_byc = sqrt(var(byc_haul)/length(byc_haul)),
@@ -108,15 +112,15 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
     #Now cobble together a column that contains the bycatch species so that we can join bycatch info without losing any strata with 0 bycatch (maybe not needed? but for completeness...). Clumsy but ok I guess.
     mutate(all_byc_species = paste(bycatchspp, sep="", collapse=",")) %>% 
     tidyr::separate(all_byc_species, bycatchspp, sep = ",") %>% 
-    tidyr::gather(species, whatev, all_of(bycatchspp)) %>% 
+    tidyr::gather(!!bycatchspp_col, whatev, all_of(bycatchspp)) %>% 
     dplyr::select(-whatev)
   
   ob_byvessel_byc <- ob_data %>% 
-    filter(species %in% bycatchspp) %>% 
-    group_by_at(c(vessel_strata, "drvid", "species")) %>% 
+    filter(!!bycatchspp_col %in% bycatchspp) %>% 
+    group_by_at(c(vessel_strata, "drvid", bycatchspp_string)) %>% 
     summarise(ves_byc = sum(!!sym(bycatchunit), na.rm=T))
   
-  ob_byvessel <- full_join(ob_byvessel_expf, ob_byvessel_byc, by = c(vessel_strata, "drvid", "species")) %>% 
+  ob_byvessel <- full_join(ob_byvessel_expf, ob_byvessel_byc, by = c(vessel_strata, "drvid", bycatchspp_string)) %>% 
     mutate(ves_byc = ifelse(is.na(ves_byc), 0, ves_byc))
   
   
@@ -129,7 +133,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
   
   booted <- ob_byvessel %>% 
     filter(ves_expf>0) %>% #So that we don't end up dividing by 0 -- there are two vessel/season/state combos with 0 retained groundfish (and 0 gstg)
-    group_by_at(c(strata, "species"))%>% 
+    group_by_at(c(strata, bycatchspp_string))%>% 
     nest() %>% #This creates a row for each year/state/season, with a data column that contains a df with all the data for that year/state/season
     mutate(booted = map(.x = data, # The list-column with the vessel-level data
                         ~ boot(data = .x, # The <S3 tibble> being sampled
@@ -144,7 +148,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
     # Drop the list-columns (no longer needed)
     dplyr::select(-data, -booted) %>%
     # Unnest the dataframe
-    tidyr::unnest()
+    ungroup()
   
   #create expansion factors data frame
   exp_factors <- ft_dat %>% 
@@ -154,8 +158,8 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
   
   out <- exp_factors %>% 
     full_join(booted, by = strata) %>% 
-    full_join(obdf_expf, by = c(strata, "species")) %>% 
-    full_join(obdf_byc, by = c(strata, "species")) %>% 
+    full_join(obdf_expf, by = c(strata, bycatchspp_string)) %>% 
+    full_join(obdf_byc, by = c(strata, bycatchspp_string)) %>% 
     mutate(pct_cvg = round((total_expf / fleet_expf) * 100, 2),
            pct_hauls_byc = round((n_hauls_byc/n_obs_hauls)*100, 2),
            byc_ratio = total_byc / total_expf,
