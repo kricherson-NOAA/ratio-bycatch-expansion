@@ -9,7 +9,7 @@
 #management_groups = do we want to calculate ratios by managment grouping? Defaults to TRUE.
 
 
-do_ratio_multi_test <- function(ob_dat = ob, strata = c("sector", "gear", "year"), expfactor = "tgt_mt", bycatchspp_col = "species", bycatchspp, bycatchunit = "dis_mt", management_groups = FALSE) #haul_id trip_id drvid
+do_ratio_multi <- function(ob_dat = ob, strata = c("sector", "gear", "year"), expfactor = "tgt_mt", bycatchspp_col = "species", bycatchspp, bycatchunit = "dis_mt", management_groups = FALSE) #haul_id trip_id drvid
 {
   require(dplyr)
   require(tidyr)
