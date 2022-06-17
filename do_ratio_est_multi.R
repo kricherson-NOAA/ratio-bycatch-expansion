@@ -7,7 +7,7 @@
 #bycatchsp = A vector containing all the bycatch species of interest.
 #bycatchunit = The name of the column with the measure of bycatch to be expanded. Defaults to dis_mt, but could be counts, etc. 
 #management_groups = do we want to calculate ratios by managment grouping? Defaults to TRUE.
-#cleanup = do we want to do some post-processing where we round values, replace NAs with 0s, replace lower CI with observed bycatch, etc
+#cleanup = do we want to do some post-processing where we replace a few names, select a subset of columns, round values, replace NAs with 0s, replace lower CI with observed bycatch, etc
 
 do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col, bycatchspp, bycatchunit, management_groups = TRUE, cleanup = TRUE)
 {
@@ -42,7 +42,8 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col
     mutate(pct_cvg = round((total_expf / fleet_expf) * 100, 2),
            est_byc = byc_ratio * fleet_expf,
            est_byc_lower = byc_ratio_lower * fleet_expf,
-           est_byc_upper = byc_ratio_upper * fleet_expf)
+           est_byc_upper = byc_ratio_upper * fleet_expf) %>% 
+    ungroup()
   
   if(management_groups)
   {
@@ -54,15 +55,29 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col
   {
     if(management_groups)
     {
+      
       out <- out %>% 
         select(!!sym(bycatchspp_col), grouping, !!!syms(strata), obs_byc = total_byc, obs_expf = total_expf, fleet_expf, pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls, n_hauls_byc, pct_hauls_byc, byc_ratio, est_byc, est_byc_lower, est_byc_upper)
+      
     }else{
+      
       out <- out %>% 
         select(!!sym(bycatchspp_col), !!!syms(strata), obs_byc = total_byc, obs_expf = total_expf, fleet_expf, pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls, n_hauls_byc, pct_hauls_byc, byc_ratio, est_byc, est_byc_lower, est_byc_upper)
+      
     }
+    
+    out <- out %>% 
+      mutate_at(vars(pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls), ~replace_na(., 0)) %>% 
+      mutate_at(vars(pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls), ~replace_na(., 0)) %>% 
+      mutate_at(vars(obs_expf, fleet_expf, obs_byc, est_byc, est_byc_lower, est_byc_upper), ~round(., 3)) %>% 
+      mutate_at(vars(byc_ratio), ~round(., 5)) %>% 
+      mutate(est_byc_lower = ifelse(est_byc_lower < obs_byc, obs_byc, est_byc_lower)) %>% 
+      mutate_at(vars(byc_ratio, est_byc, est_byc_lower, est_byc_upper), ~ifelse(is.nan(.), NA, .)) %>% 
+      ungroup() %>% 
+      as.data.frame()
   }
   
-  return(ungroup(out))
+  return(out)
   
   
 }
