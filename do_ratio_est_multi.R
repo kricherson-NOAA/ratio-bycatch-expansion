@@ -7,8 +7,9 @@
 #bycatchsp = A vector containing all the bycatch species of interest.
 #bycatchunit = The name of the column with the measure of bycatch to be expanded. Defaults to dis_mt, but could be counts, etc. 
 #management_groups = do we want to calculate ratios by managment grouping? Defaults to TRUE.
+#cleanup = do we want to do some post-processing where we round values, replace NAs with 0s, replace lower CI with observed bycatch, etc
 
-do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col, bycatchspp, bycatchunit, management_groups = TRUE)
+do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col, bycatchspp, bycatchunit, management_groups = TRUE, cleanup = TRUE)
 {
   require(dplyr)
   require(tidyr)
@@ -24,10 +25,20 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col
     clean_names() %>% 
     #mutate(r_state = state) %>% 
     group_by_at(strata) %>% 
-    summarise(fleet_expf = sum(!!sym(expfactor), na.rm=T))
+    summarise(fleet_expf = sum(!!sym(expfactor), na.rm=T)) %>% 
+    rowid_to_column()
   
-  out <- exp_factors %>% 
-    full_join(byc_ratios, by = strata) %>% 
+  #In order to have a row for each species-strata combination when there is 0 coverage of a strata (ie there are fish tickets in the strata, but no observations), I'm going to duplicate the exp_factors data 1x for each species
+  #TODO: add groupings option here
+  exp_factors_spp_key <- expand.grid(bycatchspp, exp_factors$rowid)
+  names(exp_factors_spp_key) <- c(bycatchspp_col, "rowid")
+
+  
+  exp_factors_long <- exp_factors_spp_key %>% 
+    full_join(exp_factors, by = c("rowid"))
+  
+  out <- exp_factors_long %>% 
+    full_join(byc_ratios, by = c(strata, bycatchspp_col)) %>% 
     mutate(pct_cvg = round((total_expf / fleet_expf) * 100, 2),
            est_byc = byc_ratio * fleet_expf,
            est_byc_lower = byc_ratio_lower * fleet_expf,
@@ -39,7 +50,19 @@ do_ratio_est_multi <- function(ob_dat, ft_dat, strata, expfactor, bycatchspp_col
       mutate(grouping = gsub("<b0>", "\xb0", grouping))
   }
   
-  return(out)
+  if(cleanup)
+  {
+    if(management_groups)
+    {
+      out <- out %>% 
+        select(!!sym(bycatchspp_col), grouping, !!!syms(strata), obs_byc = total_byc, obs_expf = total_expf, fleet_expf, pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls, n_hauls_byc, pct_hauls_byc, byc_ratio, est_byc, est_byc_lower, est_byc_upper)
+    }else{
+      out <- out %>% 
+        select(!!sym(bycatchspp_col), !!!syms(strata), obs_byc = total_byc, obs_expf = total_expf, fleet_expf, pct_cvg, n_obs_ves, n_obs_trips, n_obs_hauls, n_hauls_byc, pct_hauls_byc, byc_ratio, est_byc, est_byc_lower, est_byc_upper)
+    }
+  }
+  
+  return(ungroup(out))
   
   
 }

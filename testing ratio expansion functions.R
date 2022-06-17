@@ -17,6 +17,9 @@ load_data(c("WCGOP_proc", "FT_proc"))
 
 #First, do the calculation "manually" (as I have in previous reports). Let's use stripetail rockfish as an example since it's a fairly common species. Look at bycatch ratios by gear within the CS sector and make sure they match. 
 
+ratio.se <- function(x.mean, y.mean, x.se, y.se){ sqrt(  (x.mean/y.mean)^2 *  (  (x.se/x.mean)^2  +  (y.se/y.mean)^2  -  ( (x.se/x.mean)^2 * (y.se/y.mean)^2 ) ) ) }
+
+
 #Get CS stripetail data
 ob_cs_st <- OBOrig_Proc %>%
   clean_names() %>% 
@@ -61,31 +64,31 @@ ob_cs_st_bystrata <- ob_cs_st_byhaul %>%
   arrange(year, gear)
 
 #Now use the function
-ob_cs_st_bystrata2 <- do_ratio_multi(ob_dat = ob_cs_st, strata = c("year", "gear"), expfactor = "gfr_mt", bycatchspp = "Stripetail Rockfish", bycatchunit = "dis_mt", management_groups = TRUE) %>% 
+ob_cs_st_bystrata2 <- do_ratio_multi(ob_dat = ob_cs_st, strata = c("year", "gear"), expfactor = "gfr_mt", bycatchspp = c("Stripetail Rockfish"), bycatchunit = "dis_mt", management_groups = TRUE, bycatchspp_col = "species") %>% 
   arrange(year, gear)
 
 #Do the north group bycatch ratios match? Yes.
-all.equal(ob_cs_st_bystrata$byc_ratio_north, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40<b0>10' N. lat.)")$byc_ratio)
+all.equal(ob_cs_st_bystrata$byc_ratio_north, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40°10' N. lat.)")$byc_ratio)
 
 #Do the south group bycatch ratios match? Yes.
-all.equal(ob_cs_st_bystrata$byc_ratio_south, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40<b0>10' N. lat.)")$byc_ratio)
+all.equal(ob_cs_st_bystrata$byc_ratio_south, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40°10' N. lat.)")$byc_ratio)
 
 #Do the north ratio SEs match? Yes.
-all.equal(ob_cs_st_bystrata$byc_se_north, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40<b0>10' N. lat.)")$byc_se)
+all.equal(ob_cs_st_bystrata$byc_se_north, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40°10' N. lat.)")$byc_se)
 
 #Do the south ratio SEs match? Yes.
-all.equal(ob_cs_st_bystrata$byc_se_south, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40<b0>10' N. lat.)")$byc_se)
+all.equal(ob_cs_st_bystrata$byc_se_south, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40°10' N. lat.)")$byc_se)
 
 #Do the number of observed vessels match? Yes.
-all.equal(ob_cs_st_bystrata$n_obs_ves, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40<b0>10' N. lat.)")$n_obs_ves)
+all.equal(ob_cs_st_bystrata$n_obs_ves, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40°10' N. lat.)")$n_obs_ves)
 
 #Do the observed trips match?  Yes. 
-all.equal(ob_cs_st_bystrata$n_obs_trips, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40<b0>10' N. lat.)")$n_obs_trips)
-all.equal(ob_cs_st_bystrata$n_obs_trips, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40<b0>10' N. lat.)")$n_obs_trips)
+all.equal(ob_cs_st_bystrata$n_obs_trips, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40°10' N. lat.)")$n_obs_trips)
+all.equal(ob_cs_st_bystrata$n_obs_trips, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40°10' N. lat.)")$n_obs_trips)
 
 #Do the observed hauls match? Yes. 
-all.equal(ob_cs_st_bystrata$n_obs_hauls, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40<b0>10' N. lat.)")$n_obs_hauls)
-all.equal(ob_cs_st_bystrata$n_obs_hauls, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40<b0>10' N. lat.)")$n_obs_hauls)
+all.equal(ob_cs_st_bystrata$n_obs_hauls, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (South of 40°10' N. lat.)")$n_obs_hauls)
+all.equal(ob_cs_st_bystrata$n_obs_hauls, filter(ob_cs_st_bystrata2, grouping == "Minor shelf rockfish (North of 40°10' N. lat.)")$n_obs_hauls)
 
 ##########Testing with NCS data, no groupings, multiple species##################
 
@@ -150,7 +153,8 @@ ncs_bystrata2 <- do_ratio_multi(ob_dat = OBOrig_Proc %>%
                                    expfactor = "tgt_mt", 
                                    bycatchspp = c("Yelloweye Rockfish", "Sablefish"), 
                                    bycatchunit = "dis_mt", 
-                                   management_groups = FALSE) %>% 
+                                   management_groups = FALSE,
+                                bycatchspp_col = "species") %>% 
   as.data.frame() %>% 
   arrange(species, sector, year, gear) %>% 
   select(sector,species, year, gear, total_byc, mean_byc, se_byc, total_expf, mean_expf, se_expf, n_obs_ves, n_obs_trips, n_obs_hauls, byc_ratio, byc_se, byc_ratio_lower, byc_ratio_upper, n_hauls_byc, pct_hauls_byc)
@@ -248,7 +252,8 @@ ncs_st_exp2 <- do_ratio_est_multi(ob_dat = OBOrig_Proc %>%
                                 expfactor = "tgt_mt", 
                                 bycatchspp = c("Stripetail Rockfish"), 
                                 bycatchunit = "dis_mt", 
-                                management_groups = TRUE) %>% 
+                                management_groups = TRUE,
+                                bycatchspp_col = "species") %>% 
   as.data.frame() %>% 
   arrange(species, grouping, sector, year, gear) %>% 
   select(sector, species, grouping, year, gear, total_byc, mean_byc, se_byc, total_expf, mean_expf, se_expf, n_obs_ves, n_obs_trips, n_obs_hauls, byc_ratio, byc_se, byc_ratio_lower, byc_ratio_upper, n_hauls_byc, pct_hauls_byc, pct_cvg, est_byc, est_byc_lower, est_byc_upper)
