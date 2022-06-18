@@ -253,7 +253,8 @@ ncs_st_exp2 <- do_ratio_est_multi(ob_dat = OBOrig_Proc %>%
                                 bycatchspp = c("Stripetail Rockfish"), 
                                 bycatchunit = "dis_mt", 
                                 management_groups = TRUE,
-                                bycatchspp_col = "species") %>% 
+                                bycatchspp_col = "species",
+                                cleanup = FALSE) %>% 
   as.data.frame() %>% 
   arrange(species, grouping, sector, year, gear) %>% 
   select(sector, species, grouping, year, gear, total_byc, mean_byc, se_byc, total_expf, mean_expf, se_expf, n_obs_ves, n_obs_trips, n_obs_hauls, byc_ratio, byc_se, byc_ratio_lower, byc_ratio_upper, n_hauls_byc, pct_hauls_byc, pct_cvg, est_byc, est_byc_lower, est_byc_upper)
