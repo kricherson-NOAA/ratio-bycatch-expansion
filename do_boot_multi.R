@@ -143,6 +143,7 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
     rowwise() %>% #"rowwise() is used for the results of do() when you create list-variables." (presumably similar for map()-created list variables)
     mutate(point_est_ratio = booted$t0,  #Get point estimate, median, lower 2.5th percentile, upper 97.5th percentile of bootstrapped ratios
            median_ratio = median(booted$t),
+           mean_ratio = mean(booted$t),
            lower_ci = quantile(booted$t, 0.025),
            upper_ci = quantile(booted$t, 0.975)) %>% 
     # Drop the list-columns (no longer needed)
@@ -164,6 +165,8 @@ do_boot_multi <- function(ob_dat, ft_dat, strata, vessel_strata = strata, expfac
            pct_hauls_byc = round((n_hauls_byc/n_obs_hauls)*100, 2),
            byc_ratio = total_byc / total_expf,
            est_byc = byc_ratio * fleet_expf,
+           est_byc_mean_ratio = mean_ratio * fleet_expf,
+           est_byc_med_ratio = median_ratio * fleet_expf,
            est_byc_lower = lower_ci* fleet_expf,
            est_byc_lower_trunc = ifelse(est_byc_lower < total_byc, total_byc, est_byc_lower), #Truncate at observed value
            est_byc_upper = upper_ci * fleet_expf,
