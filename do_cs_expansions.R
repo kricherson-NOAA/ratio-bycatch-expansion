@@ -6,9 +6,10 @@ do_cs_expansion <- function(df, strata, bycatchspp)
 {
   #Identify hauls with NIFQ
   df_nifq <- df %>% 
-    dplyr::filter(datatype == "Unsampled IFQ"
-                  & catch_category_code == "NIFQ"
-                  & catch_disposition == "D")
+    dplyr::filter(datatype == "Unsampled IFQ" &
+                  #& catch_category_code == "NIFQ"
+                  (common_name == "Non-IFQ Fish Species" | ifq == 0) & #QUESTION: is this correct? ifq is NA when common_name is "Non-IFQ Fish Species"
+                  catch_disposition == "D")
   
   hauls_nifq <- df[df$haul_id %in% unique(df_nifq$haul_id),]
   
@@ -25,10 +26,12 @@ do_cs_expansion <- function(df, strata, bycatchspp)
       group_by_at(strata) %>% 
       summarise(obs_tgt_mt = sum(tgt_mt[datatype == "Analysis Data" | 
                                           (datatype == "Unsampled IFQ" & 
-                                             catch_category_code != "NIFQ")], na.rm = T),
+                                             #catch_category_code != "NIFQ")], na.rm = T),
+                                             common_name != "Non-IFQ Fish Species")], na.rm = T),
                 obs_hauls = n_distinct(haul_id[datatype == "Analysis Data" | 
                                                  (datatype == "Unsampled IFQ" & 
-                                                    catch_category_code != "NIFQ")]),
+                                                    #catch_category_code != "NIFQ")]),
+                                                    common_name != "Non-IFQ Fish Species")]),
                 obs_byc_ct = sum(exp_sp_ct[species == bycatchsp &
                                              datatype == "Analysis Data" &
                                              catch_disposition == "D"]),
@@ -37,13 +40,16 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                              catch_disposition == "D"]),
                 n_obs_ves = n_distinct(drvid[datatype == "Analysis Data" | 
                                                (datatype == "Unsampled IFQ" & 
-                                                  catch_category_code != "NIFQ")]), 
+                                                  #catch_category_code != "NIFQ")]), 
+                                                  common_name != "Non-IFQ Fish Species")]),
                 unobs_tgt_mt = sum(tgt_mt[datatype != "Analysis Data" & 
                                             !(datatype == "Unsampled IFQ" & 
-                                                catch_category_code != "NIFQ")], na.rm = T),
+                                                #catch_category_code != "NIFQ")], na.rm = T),
+                                                common_name != "Non-IFQ Fish Species")], na.rm = T),
                 unobs_hauls = n_distinct(haul_id[datatype != "Analysis Data" & 
                                                    !(datatype == "Unsampled IFQ" & 
-                                                       catch_category_code != "NIFQ")])) %>% 
+                                                       #catch_category_code != "NIFQ")])) %>% 
+                                                       common_name != "Non-IFQ Fish Species")])) %>% 
       mutate(pct_tgt_obs = round((obs_tgt_mt / (obs_tgt_mt + unobs_tgt_mt)) * 100 , 1),
              total_tgt_mt = obs_tgt_mt + unobs_tgt_mt)
     
@@ -71,26 +77,31 @@ do_cs_expansion <- function(df, strata, bycatchspp)
     failed_trips <- unique(df$trip_id[df$datatype == "Failed Data"])
     
     #Now create DF with numerators, denominators, and expansion factors. Note conversion to MT. There is some redundancy in here in the numerators, but leaving for now for explicitness.
+    
     unsamp_expansion <- df %>% 
       group_by_at(strata) %>% 
-      summarise(nifq_num_ct = sum(exp_sp_ct[species == bycatchsp &
+      summarise(
+                #NIFQ numerator: sum of count or weight of sampled protected species
+                nifq_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
                 
                 nifq_num_wt = sum(exp_sp_wt[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
-                
+                #NIFQ denominator: sum of sampled discarded weight for all non-IFQ species in strata
                 nifq_denom = sum(mt[ifq == 0 &
                                       datatype == "Analysis Data" &
                                       catch_disposition == "D"]),
-                
-                nifq_expf = sum(mt[ifq == 0 &
+                #NIFQ expansion factor: sum of NIFQ discarded weight in strata
+                nifq_expf = sum(mt[#ifq == 0 &
                                      datatype == "Unsampled IFQ" &
-                                     catch_category_code == "NIFQ" &
+                                     #catch_category_code == "NIFQ" &
+                                     (common_name == "Non-IFQ Fish Species") & 
                                      catch_disposition == "D" &
                                      haul_id %in% nifq_hauls_to_expand$haul_id]),
                 
+                #Unsampled ZMIS numerator: sum of count or weight of sampled protected species
                 zmis_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
@@ -99,14 +110,18 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
+                #Unsampled ZMIS denominator: sum of sampled discarded weight in strata
                 zmis_denom = sum(mt[datatype == "Analysis Data" &
                                       catch_disposition == "D"]),
                 
+                #Unsampled ZMIS expansion factor: sum of unsampled ZMIS discarded weight in strata
                 zmis_expf = sum(mt[datatype == "Unsampled ZMIS" &
-                                     catch_category_code == "ZMIS" &
-                                     species_composition_id == 0 &
+                                     #catch_category_code == "ZMIS" &
+                                     #species_composition_id == 0 &
+                                     common_name == "Misc Mixed Species" & 
                                      catch_disposition == "D"]),
                 
+                #Unsorted numerator: sum of count or weight of sampled protected species
                 unst_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
@@ -115,13 +130,17 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
+                #Unsorted denominator: sum of sampled weight for all species, retained and discarded
                 unst_denom = sum(mt[datatype == "Analysis Data"]),
                 
+                #Unsorted expansion factor: sum of UNST weight in strata
                 unst_expf = sum(mt[datatype == "Unsampled ZMIS" &
-                                     catch_category_code == "UNST" &
-                                     species_composition_id == 0 &
+                                     # catch_category_code == "UNST" &
+                                     # species_composition_id == 0 &
+                                     common_name == "Unsorted catch not sampled" &
                                      catch_disposition == "D"]),
                 
+                #Failed data numerator: sum of count or weight of sampled protected species
                 fail_num_ct = sum(exp_sp_ct[species == bycatchsp &
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]),
@@ -130,8 +149,10 @@ do_cs_expansion <- function(df, strata, bycatchspp)
                                               datatype == "Analysis Data" &
                                               catch_disposition == "D"]/2204.6),
                 
+                #Failed data denominator: sum of targeted retained 
                 fail_denom = sum(tgt_mt[datatype == "Analysis Data"]),
                 
+                #Failed data expansion factor: sum of targeted retained in failed trips in strata
                 fail_expf = sum(tgt_mt[trip_id %in% failed_trips])
                 
       ) %>% 
